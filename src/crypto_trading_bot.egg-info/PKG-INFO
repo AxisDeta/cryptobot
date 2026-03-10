@@ -1,0 +1,74 @@
+Metadata-Version: 2.4
+Name: crypto-trading-bot
+Version: 0.1.0
+Summary: Hybrid crypto trading bot with market, sentiment, regime, and risk layers.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.116.0
+Requires-Dist: uvicorn>=0.35.0
+Requires-Dist: jinja2>=3.1.4
+Requires-Dist: pydantic>=2.8.0
+Provides-Extra: live
+Requires-Dist: ccxt>=4.4.0; extra == "live"
+Requires-Dist: praw>=7.8.0; extra == "live"
+Requires-Dist: mysql-connector-python>=9.0.0; extra == "live"
+
+﻿# Crypto Trading Bot
+
+Hybrid crypto trading bot aligned to your outline:
+
+- Market microstructure features (returns, volatility, volume, order-book imbalance)
+- Reddit sentiment ingestion with engagement weighting
+- Selective LLM event extraction (Gemini) for high-impact posts only
+- Direction + volatility regime models
+- Risk-aware decision engine (confidence + volatility targeting)
+- Backtesting and walk-forward validation
+- Live CLI + FastAPI frontend
+- MySQL storage for prediction runs, posts, and extracted events
+
+## 1. Environment variables
+
+Fill values in:
+
+- `C:\Users\adm\.vscode\Products\CryptoTool\.env`
+
+Required for full live flow:
+
+- `REDDIT_*`
+- `GEMINI_API_KEY`
+- `MYSQL_*`
+
+## 2. Install
+
+```bash
+python -m pip install -e .
+python -m pip install -e .[live]
+```
+
+## 3. Run tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+## 4. Run live CLI prediction
+
+```bash
+python main.py --exchange binance --symbol BTC/USDT --timeframe 1h --llm-model gemini-2.0-flash
+```
+
+## 5. Run web app frontend
+
+```bash
+python run_web.py
+```
+
+Open `http://127.0.0.1:8000`.
+
+## Storage behavior
+
+When `MYSQL_*` is configured, the app automatically:
+
+- creates tables (`prediction_runs`, `reddit_posts`, `event_signals`) if missing
+- saves each live prediction run and linked Reddit/event records
+- returns `run_id` in API/CLI response

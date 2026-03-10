@@ -1,0 +1,211 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CryptoBot Live Predictions</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <div class="ambient"></div>
+    <main class="layout">
+      <section class="panel brand">
+        <p class="eyebrow">Crypto Intelligence Terminal</p>
+        <h1>CryptoBot Signal</h1>
+        <p class="subtitle">Licensed trading intelligence for crypto traders.</p>
+        <p class="hint">Signed in as: <strong>{{ user_email }}</strong></p>
+        <div class="status-row">
+          <span id="health-dot" class="dot"></span>
+          <span id="health-text">Checking system...</span>
+        </div>
+        <div class="status-row">
+          <span id="license-dot" class="dot"></span>
+          <span id="license-text">License not active</span>
+        </div>
+        <div id="subscription-badge" class="sub-badge">No active subscription</div>
+        <div class="status-row" style="gap:6px; flex-wrap:wrap;">
+          <button id="manage-subscription-btn" type="button"><span class="btn-icon">=</span> Manage Subscription</button>        </div>
+        {% if user_is_admin %}
+        <button id="admin-link-btn" type="button"><span class="btn-icon">#</span> Admin Panel</button>
+        {% endif %}
+        <button id="logout-btn" type="button" class="secondary-btn"><span class="btn-icon">x</span> Logout</button>
+
+        <div class="quick-links" style="margin-top:10px;">
+          <a href="/tutorial">Tutorial</a>
+          <a href="/about">About</a>
+          <a href="/support">Support</a>
+          <a href="/privacy">Privacy</a>
+        </div>
+      </section>
+
+      <section id="billing-panel" class="panel controls">
+        <h2>Billing + Activation</h2>
+        <label>Plan
+          <select id="plan-code">
+            <option value="test_ksh1">One-time Test - KSh 1</option>
+            <option value="monthly">Monthly - KSh 1,500</option>
+            <option value="quarterly">Quarterly - KSh 3,900</option>
+            <option value="yearly">Yearly - KSh 12,000</option>
+          </select>
+        </label>
+        <div class="plan-prices">
+          <p class="hint">One-time Test: <strong>KSh 1</strong> (1 day, testing only)</p>
+          <p class="hint">Monthly: <strong>KSh 1,500</strong></p>
+          <p class="hint">Quarterly: <strong>KSh 3,900</strong></p>
+          <p class="hint">Yearly: <strong>KSh 12,000</strong></p>
+        </div>
+        <div class="row-actions">
+          <button id="checkout-btn" type="button"><span class="btn-icon">$</span> Checkout</button>
+        </div>
+
+        <label>Activation Key
+          <input id="activation-key" placeholder="CTB-XXXXXX-XXXXXX-XXXXXX-XXXXXX" />
+        </label>
+        <button id="activate-btn" type="button"><span class="btn-icon">*</span> Activate Key</button>
+        <button id="close-billing-btn" type="button" class="secondary-btn" style="display:none;">Close</button>
+        <p id="account-msg" class="hint">Choose plan, pay, then activate your key.</p>
+        <h3 style="margin-top:14px;">Your Subscriptions</h3>
+        <div id="subscription-list" class="hint">Loading subscriptions...</div>
+      </section>
+
+      <section class="panel results">
+        <h2>Trading Signal</h2>
+
+        <div id="onboarding-card" class="onboarding-card" style="display:none;">
+          <strong>Quick Start</strong>
+          <p>1) Pick market, pair, and timeframe. 2) Click Generate Signal. 3) Read Action + Confidence. 4) Start small and use stop-loss.</p>
+          <div class="row-actions">
+            <button id="onboarding-dismiss-btn" type="button" class="secondary-btn">Got it</button>
+            <a class="mini-link" href="/tutorial">Open Full Tutorial</a>
+          </div>
+        </div>
+
+        <div class="mode-row">
+          <label><input id="beginner-mode" type="checkbox" /> Beginner Mode</label>
+        </div>
+
+        <div id="signal-spotlight" class="signal-spotlight wait">
+          <div class="spotlight-title">Current Decision</div>
+          <div id="spotlight-action" class="spotlight-action">WAIT</div>
+          <div id="spotlight-reason" class="spotlight-reason">Run analysis to get a clear direction.</div>
+        </div>
+
+        <div class="headline">
+          <p id="signal-badge" class="badge neutral">WAIT</p>
+          <p id="signal-note" class="signal-note">Activate a license and run analysis.</p>
+        </div>
+
+        <form id="predict-form">
+          <label>Market
+            <select name="market_type" id="market-type-input">
+              <option value="crypto" selected>Crypto</option>
+              <option value="forex">Forex</option>
+            </select>
+          </label>
+          <label>Exchange
+            <select name="exchange" id="exchange-input">
+              <option value="binance" selected>Binance</option>
+              <option value="kraken">Kraken</option>
+              <option value="coinbase">Coinbase</option>
+            </select>
+          </label>
+          <label>Trading Pair
+            <input id="symbol-input" name="symbol" value="BTC/USDT" list="symbol-suggestions" placeholder="e.g. BTC/USDT" />
+          </label>
+          <datalist id="symbol-suggestions"></datalist>
+          <p id="symbol-hint" class="hint">Supported pairs vary by exchange or market.</p>
+
+          <div class="watchlist-row">
+            <button id="watchlist-add-btn" type="button" class="secondary-btn">+ Add to Watchlist</button>
+            <div id="watchlist-items" class="watchlist-items"></div>
+          </div>
+
+          <label>Timeframe (Custom)
+            <input name="timeframe" value="1h" placeholder="1m..1w" />
+          </label>
+          <p class="hint">Examples: <strong>1m</strong> (1 minute), <strong>1h</strong> (1 hour), <strong>1d</strong> (1 day). Range: <strong>1m</strong> to <strong>1w</strong>.</p>
+
+          <label>Risk Profile
+            <select id="risk-profile" name="risk_profile">
+              <option value="conservative">Conservative</option>
+              <option value="moderate" selected>Moderate</option>
+              <option value="aggressive">Aggressive</option>
+            </select>
+          </label>
+          <p id="risk-note" class="hint">Conservative: smaller position and stricter confidence filter.</p>
+
+          <button id="run-btn" type="submit"><span class="btn-icon">></span> Generate Signal</button>
+        </form>
+
+        <div id="results-skeleton" class="skeleton-wrap" style="display:none;">
+          <div class="skeleton-line"></div>
+          <div class="skeleton-grid">
+            <div class="skeleton-box"></div><div class="skeleton-box"></div><div class="skeleton-box"></div><div class="skeleton-box"></div>
+          </div>
+        </div>
+
+        <div id="advanced-metrics" class="cards">
+          <article class="metric"><h3>Up Probability</h3><p id="direction_prob_up">--</p></article>
+          <article class="metric"><h3>Confidence</h3><p id="confidence">--</p></article>
+          <article class="metric"><h3>Expected Volatility</h3><p id="expected_volatility">--</p></article>
+          <article class="metric"><h3>Position Size</h3><p id="recommended_position">--</p></article>
+        </div>
+        <div id="advanced-notes" class="metric-notes">
+          <p id="direction_prob_up_note" class="hint">Up Probability: --</p>
+          <p id="confidence_note" class="hint">Confidence: --</p>
+          <p id="expected_volatility_note" class="hint">Expected Volatility: --</p>
+          <p id="recommended_position_note" class="hint">Position Size: --</p>
+        </div>
+
+        <div id="explain-panel" class="explain-panel">
+          <p><strong>What this means:</strong> <span id="explain-summary">Waiting for first signal.</span></p>
+        </div>
+
+        <p id="trade-guidance" class="trade-guidance">Run a signal to see trade guidance.</p>
+        <div id="beginner-card" class="beginner-card" style="display:none;">
+          <p><strong>Action:</strong> <span id="beginner-action">--</span></p>
+          <p><strong>Strength:</strong> <span id="beginner-strength">--</span></p>
+          <p><strong>Risk:</strong> <span id="beginner-risk">--</span></p>
+          <p><strong>Why:</strong> <span id="beginner-why">--</span></p>
+          <p><strong>What to do now:</strong> <span id="beginner-next">--</span></p>
+        </div>
+        <p id="ai-explanation" class="trade-guidance">AI Analyst explanation will appear here.</p>
+        <div id="advanced-insights" class="insights">
+          <span id="posts-insight">Posts: --</span>
+          <span id="ai-insight">AI Analyst: --</span>
+          <span id="quality-insight">Reliability: --</span>
+        </div>
+
+        <div class="history-panel">
+          <h3>Recent Signals</h3>
+          <div id="signal-history" class="hint">No signals yet.</div>
+        </div>
+      </section>
+
+      <section class="panel chart-panel">
+        <h2>Price + Model View</h2>
+        <div class="chart-toolbar">
+          <label><input id="toggle-ema" type="checkbox" checked /> Show EMA</label>
+          <label><input id="toggle-signals" type="checkbox" /> Show Signals</label>
+          <label><input id="toggle-prob" type="checkbox" checked /> Show Model Probability</label>
+          <label>Chart Window
+            <select id="chart-window">
+              <option value="prediction" selected>Prediction Only</option>
+              <option value="context">Prediction + Last 24h</option>
+            </select>
+          </label>
+        </div>
+        <div id="chart-skeleton" class="skeleton-wrap" style="display:none;">
+          <div class="skeleton-box" style="height:260px;"></div>
+          <div class="skeleton-box" style="height:130px;"></div>
+        </div>
+        <div id="chart-price"></div>
+        <div id="chart-prob"></div>
+      </section>
+    </main>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="/static/app.js?v=20260310c"></script>
+  </body>
+</html>
+
+

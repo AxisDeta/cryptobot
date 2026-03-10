@@ -1,0 +1,44 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CryptoBot Admin</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main class="layout" style="grid-template-columns: 1fr; width:min(1280px,96vw);">
+      <section class="panel">
+        <h1>Admin Panel</h1>
+        <p class="subtitle">Overview, users, licenses, and payments.</p>
+        <div class="row-actions">
+          <button id="back-app-btn" type="button">Back To App</button>
+          <button id="refresh-btn" type="button">Refresh Data</button>
+          <button id="logout-btn" type="button">Logout</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Overview</h2>
+        <div class="cards" id="overview-cards"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Users</h2>
+        <p class="hint">User identity, contact, account status, and latest subscription summary.</p>
+        <div id="users-table"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Licenses</h2>
+        <div id="licenses-table"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Payments</h2>
+        <div id="payments-table"></div>
+      </section>
+    </main>
+    <script src="/static/admin.js?v=20260310a"></script>
+  </body>
+</html>

@@ -1,0 +1,3 @@
+[console_scripts]
+cryptobot-cli = cryptobot.main:main
+cryptobot-web = cryptobot.webapp:run

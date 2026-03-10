@@ -1,0 +1,69 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CryptoBot Login</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main class="layout" style="grid-template-columns: 1fr; max-width: 560px;">
+      <section class="panel controls">
+        <h1>CryptoBot Access</h1>
+        <p class="subtitle">Sign in to access trading features.</p>
+
+        <div id="auth-panel">
+          <label>Email
+            <input id="auth-email" type="email" placeholder="you@example.com" />
+          </label>
+          <label>Password</label>
+          <div class="password-wrap">
+            <input id="auth-password" type="password" placeholder="At least 8 chars" />
+            <button type="button" class="pw-toggle" data-target="auth-password" aria-label="Show password">👁</button>
+          </div>
+          <div class="row-actions">
+            <button id="signup-btn" type="button"><span class="btn-icon">+</span> Sign Up</button>
+            <button id="login-btn" type="button"><span class="btn-icon">></span> Login</button>
+          </div>
+          <button id="google-btn" type="button" class="google-btn">
+            <span class="btn-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21.35 12.2c0-.64-.06-1.25-.16-1.84H12v3.48h5.26a4.49 4.49 0 0 1-1.95 2.95v2.45h3.15c1.84-1.7 2.89-4.2 2.89-7.04Z" fill="#4285F4"/>
+                <path d="M12 22c2.62 0 4.82-.87 6.42-2.36l-3.15-2.45c-.87.58-1.98.92-3.27.92-2.52 0-4.65-1.7-5.41-3.99H3.34v2.5A9.99 9.99 0 0 0 12 22Z" fill="#34A853"/>
+                <path d="M6.59 14.12a6.02 6.02 0 0 1 0-3.84v-2.5H3.34a10 10 0 0 0 0 8.84l3.25-2.5Z" fill="#FBBC05"/>
+                <path d="M12 6.09c1.43 0 2.71.49 3.71 1.45l2.78-2.78A9.95 9.95 0 0 0 12 2a9.99 9.99 0 0 0-8.66 5.78l3.25 2.5C7.35 7.79 9.48 6.09 12 6.09Z" fill="#EA4335"/>
+              </svg>
+            </span>
+            Continue with Google
+          </button>
+          <div class="row-actions" style="margin-top:10px;">
+            <button id="forgot-btn" type="button" class="secondary-btn"><span class="btn-icon">?</span> Forgot Password?</button>
+          </div>
+          <p id="account-msg" class="hint">Create account, verify email, then login.</p>
+        </div>
+
+        <form id="forgot-panel" style="display:none; margin-top:10px;" onsubmit="return false;">
+          <p id="forgot-msg" class="hint">Reset password directly for your account.</p>
+          <label>Email
+            <input id="forgot-email" type="email" placeholder="you@example.com" />
+          </label>
+          <label>New Password</label>
+          <div class="password-wrap">
+            <input id="forgot-new-password" type="password" placeholder="At least 8 chars" />
+            <button type="button" class="pw-toggle" data-target="forgot-new-password" aria-label="Show password">👁</button>
+          </div>
+          <label>Confirm New Password</label>
+          <div class="password-wrap">
+            <input id="forgot-confirm-password" type="password" placeholder="Repeat new password" />
+            <button type="button" class="pw-toggle" data-target="forgot-confirm-password" aria-label="Show password">👁</button>
+          </div>
+          <div class="row-actions">
+            <button id="forgot-send-btn" type="submit"><span class="btn-icon">*</span> Reset Password</button>
+            <button id="forgot-cancel-btn" type="button" class="secondary-btn">Back</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="/static/login.js?v=20260310b"></script>
+  </body>
+</html>

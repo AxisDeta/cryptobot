@@ -1,0 +1,94 @@
+﻿services:
+  - type: web
+    name: cryptobot-live
+    runtime: python
+    plan: free
+    autoDeploy: true
+    buildCommand: pip install --upgrade pip && pip install -e .[live]
+    startCommand: uvicorn cryptobot.webapp:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: APP_HOST
+        value: 0.0.0.0
+      - key: APP_PORT
+        value: "10000"
+      - key: APP_BASE_URL
+        sync: false
+      - key: APP_SESSION_SECRET
+        generateValue: true
+
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_PORT
+        value: "3306"
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+
+      - key: GEMINI_API_KEY
+        sync: false
+
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: PAYSTACK_WEBHOOK_SECRET
+        sync: false
+      - key: PAYSTACK_CALLBACK_URL
+        sync: false
+      - key: PAYSTACK_CURRENCY
+        value: KES
+
+      - key: PESAPAL_CONSUMER_KEY
+        sync: false
+      - key: PESAPAL_CONSUMER_SECRET
+        sync: false
+      - key: PESAPAL_CALLBACK_URL
+        sync: false
+      - key: PESAPAL_IPN_URL
+        sync: false
+      - key: PESAPAL_CURRENCY
+        value: KES
+      - key: PESAPAL_API_URL
+        value: https://pay.pesapal.com/v3
+
+      - key: ADMIN_EMAILS
+        sync: false
+
+      - key: BOT_SYMBOL
+        value: BTC/USDT
+      - key: BOT_TIMEFRAME
+        value: 1h
+      - key: BOT_TARGET_VOL
+        value: "0.02"
+      - key: BOT_MAX_VOL
+        value: "0.08"
+      - key: BOT_CONFIDENCE
+        value: "0.55"
+      - key: BOT_FEE_BPS
+        value: "10"
+      - key: BOT_SLIPPAGE_BPS
+        value: "5"
