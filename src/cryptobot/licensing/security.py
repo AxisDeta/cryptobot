@@ -57,7 +57,7 @@ class Plan:
 
 
 PLANS: dict[str, Plan] = {
-    "test_ksh1": Plan(code="test_ksh1", name="Test Access (One-time)", duration_days=1, amount_cents_usd=100),
+    "test_ksh1": Plan(code="test_ksh1", name="Test Access (One-time)", duration_days=1, amount_cents_usd=50000),
     "monthly": Plan(code="monthly", name="Monthly", duration_days=30, amount_cents_usd=150000),
     "quarterly": Plan(code="quarterly", name="Quarterly", duration_days=90, amount_cents_usd=390000),
     "yearly": Plan(code="yearly", name="Yearly", duration_days=365, amount_cents_usd=1200000),

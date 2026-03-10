@@ -136,7 +136,7 @@ const EXCHANGE_SUPPORTED_PAIRS = {
 
 const FOREX_SUPPORTED_PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "USD/CAD", "NZD/USD", "EUR/GBP", "EUR/JPY", "GBP/JPY"];
 
-const PLAN_PRICE_KSH = { test_ksh1: 1, monthly: 1500, quarterly: 3900, yearly: 12000 };
+const PLAN_PRICE_KSH = { test_ksh1: 500, monthly: 1500, quarterly: 3900, yearly: 12000 };
 const RISK_PROFILES = {
   conservative: { positionFactor: 0.6, note: "Conservative: smaller position and stricter confidence filter." },
   moderate: { positionFactor: 1.0, note: "Moderate: balanced risk and opportunity." },
