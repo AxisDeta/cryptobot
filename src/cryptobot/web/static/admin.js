@@ -1,4 +1,4 @@
-﻿function el(tag, text) {
+function el(tag, text) {
   const n = document.createElement(tag);
   if (text !== undefined) n.textContent = text;
   return n;
@@ -12,6 +12,28 @@ function fmtDate(v) {
 
 function yn(v) {
   return Number(v) ? "Yes" : "No";
+}
+
+function setAdminMsg(text, isError = false) {
+  const el = document.getElementById("admin-msg");
+  if (!el) return;
+  el.textContent = text || "";
+  el.style.color = isError ? "#fca5a5" : "#86efac";
+}
+
+function requireId(input, label) {
+  const raw = String(input.value || "").trim();
+  if (!raw) {
+    setAdminMsg(`${label} ID is required.`, true);
+    input.focus();
+    return null;
+  }
+  if (!/^\d+$/.test(raw)) {
+    setAdminMsg(`${label} ID must be numeric.`, true);
+    input.focus();
+    return null;
+  }
+  return raw;
 }
 
 function tableFrom(items, columns) {
@@ -56,11 +78,18 @@ function tableFrom(items, columns) {
 }
 
 async function getJson(url) {
-  const res = await fetch(url);
+  const res = await fetch(url, { credentials: "same-origin" });
+  if (res.status === 401) {
+    window.location.href = "/login";
+    throw new Error("Login required");
+  }
+  if (res.status === 403) {
+    window.location.href = "/app";
+    throw new Error("Admin access required");
+  }
   if (!res.ok) throw new Error(`Failed ${url}`);
   return await res.json();
 }
-
 async function safeGet(url, fallback) {
   try {
     return await getJson(url);
@@ -73,10 +102,19 @@ async function postJson(url, payload) {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify(payload),
   });
   let data = {};
   try { data = await res.json(); } catch (_err) { data = {}; }
+  if (res.status === 401) {
+    window.location.href = "/login";
+    throw new Error("Login required");
+  }
+  if (res.status === 403) {
+    window.location.href = "/app";
+    throw new Error("Admin access required");
+  }
   if (!res.ok) throw new Error(data.detail || `Failed ${url}`);
   return data;
 }
@@ -158,18 +196,63 @@ function renderUsers(items) {
   idInput.placeholder = "User ID";
   const btnSetAdmin = el("button", "Set Admin");
   btnSetAdmin.onclick = async () => {
-    await postJson(`/api/admin/users/${idInput.value}`, { is_admin: true });
-    await refreshAll();
+    const id = requireId(idInput, "User");
+    if (!id) return;
+    setAdminMsg("Updating user...", false);
+    btnSetAdmin.disabled = true;
+    btnDisable.disabled = true;
+    btnEnable.disabled = true;
+    try {
+      await postJson(`/api/admin/users/${id}`, { is_admin: true });
+      setAdminMsg("User updated.", false);
+      await refreshAll();
+    } catch (err) {
+      setAdminMsg(err.message || "Update failed.", true);
+    } finally {
+      btnSetAdmin.disabled = false;
+      btnDisable.disabled = false;
+      btnEnable.disabled = false;
+    }
   };
   const btnDisable = el("button", "Disable User");
   btnDisable.onclick = async () => {
-    await postJson(`/api/admin/users/${idInput.value}`, { is_active: false });
-    await refreshAll();
+    const id = requireId(idInput, "User");
+    if (!id) return;
+    setAdminMsg("Disabling user...", false);
+    btnSetAdmin.disabled = true;
+    btnDisable.disabled = true;
+    btnEnable.disabled = true;
+    try {
+      await postJson(`/api/admin/users/${id}`, { is_active: false });
+      setAdminMsg("User disabled.", false);
+      await refreshAll();
+    } catch (err) {
+      setAdminMsg(err.message || "Update failed.", true);
+    } finally {
+      btnSetAdmin.disabled = false;
+      btnDisable.disabled = false;
+      btnEnable.disabled = false;
+    }
   };
   const btnEnable = el("button", "Enable User");
   btnEnable.onclick = async () => {
-    await postJson(`/api/admin/users/${idInput.value}`, { is_active: true });
-    await refreshAll();
+    const id = requireId(idInput, "User");
+    if (!id) return;
+    setAdminMsg("Enabling user...", false);
+    btnSetAdmin.disabled = true;
+    btnDisable.disabled = true;
+    btnEnable.disabled = true;
+    try {
+      await postJson(`/api/admin/users/${id}`, { is_active: true });
+      setAdminMsg("User enabled.", false);
+      await refreshAll();
+    } catch (err) {
+      setAdminMsg(err.message || "Update failed.", true);
+    } finally {
+      btnSetAdmin.disabled = false;
+      btnDisable.disabled = false;
+      btnEnable.disabled = false;
+    }
   };
 
   actions.append(idInput, btnSetAdmin, btnDisable, btnEnable);
@@ -202,13 +285,39 @@ function renderLicenses(items) {
   idInput.placeholder = "License ID";
   const revoke = el("button", "Revoke");
   revoke.onclick = async () => {
-    await postJson(`/api/admin/licenses/${idInput.value}`, { action: "revoke" });
-    await refreshAll();
+    const id = requireId(idInput, "License");
+    if (!id) return;
+    setAdminMsg("Revoking license...", false);
+    revoke.disabled = true;
+    clearDevice.disabled = true;
+    try {
+      await postJson(`/api/admin/licenses/${id}`, { action: "revoke" });
+      setAdminMsg("License revoked.", false);
+      await refreshAll();
+    } catch (err) {
+      setAdminMsg(err.message || "Update failed.", true);
+    } finally {
+      revoke.disabled = false;
+      clearDevice.disabled = false;
+    }
   };
   const clearDevice = el("button", "Clear Device");
   clearDevice.onclick = async () => {
-    await postJson(`/api/admin/licenses/${idInput.value}`, { action: "clear_device" });
-    await refreshAll();
+    const id = requireId(idInput, "License");
+    if (!id) return;
+    setAdminMsg("Clearing device...", false);
+    revoke.disabled = true;
+    clearDevice.disabled = true;
+    try {
+      await postJson(`/api/admin/licenses/${id}`, { action: "clear_device" });
+      setAdminMsg("License device cleared.", false);
+      await refreshAll();
+    } catch (err) {
+      setAdminMsg(err.message || "Update failed.", true);
+    } finally {
+      revoke.disabled = false;
+      clearDevice.disabled = false;
+    }
   };
 
   actions.append(idInput, revoke, clearDevice);
@@ -273,3 +382,18 @@ window.addEventListener("DOMContentLoaded", async () => {
     document.body.append(el("p", String(err)));
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
