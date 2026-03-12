@@ -69,7 +69,7 @@ function payloadMessage(payload, fallback = "Request failed") {
       const msgs = payload.detail.map((d) => payloadMessage(d, "")).filter(Boolean);
       if (msgs.length) return msgs.join("; ");
     }
-    try { return JSON.stringify(requestPayload); } catch (_err) { return fallback; }
+    try { return JSON.stringify(payload); } catch (_err) { return fallback; }
   }
   return String(payload);
 }
@@ -251,22 +251,58 @@ function renderSignalHistory() {
   }
   host.innerHTML = items.map((row, idx) => {
     const t = row.ts ? new Date(row.ts).toLocaleString() : "-";
-    return `<div class=\"history-item\"><strong>${row.action}</strong> ${row.symbol} (${row.timeframe}) | conf ${fmtPct(row.confidence)} | ${t}<br/><label>Outcome <select data-history-idx=\"${idx}\"><option value=\"pending\" ${row.outcome === "pending" ? "selected" : ""}>Pending</option><option value=\"win\" ${row.outcome === "win" ? "selected" : ""}>Win</option><option value=\"loss\" ${row.outcome === "loss" ? "selected" : ""}>Loss</option><option value=\"skip\" ${row.outcome === "skip" ? "selected" : ""}>Skipped</option></select></label></div>`;
+    return `<div class="history-item"><strong>${row.action}</strong> ${row.symbol} (${row.timeframe}) | conf ${fmtPct(row.confidence)} | ${t}<br/><label>Outcome <select data-history-idx="${idx}" data-signal-id="${Number(row.signal_id || 0)}"><option value="pending" ${row.outcome === "pending" ? "selected" : ""}>Pending</option><option value="win" ${row.outcome === "win" ? "selected" : ""}>Win</option><option value="loss" ${row.outcome === "loss" ? "selected" : ""}>Loss</option><option value="skip" ${row.outcome === "skip" ? "selected" : ""}>Skipped</option></select></label></div>`;
   }).join("");
   host.querySelectorAll("select[data-history-idx]").forEach((sel) => {
-    sel.addEventListener("change", () => {
+    sel.addEventListener("change", async () => {
       const idx = Number(sel.getAttribute("data-history-idx") || -1);
       const rows = getSignalHistory();
       if (!rows[idx]) return;
+      const previous = rows[idx].outcome || "pending";
       rows[idx].outcome = String(sel.value || "pending");
       setSignalHistory(rows);
+      const signalId = Number(sel.getAttribute("data-signal-id") || rows[idx].signal_id || 0);
+      if (signalId > 0) {
+        try {
+          await fetch(`/api/signals/outcomes/${signalId}`, {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify({ outcome: rows[idx].outcome }),
+          });
+        } catch (_err) {
+          rows[idx].outcome = previous;
+          setSignalHistory(rows);
+          sel.value = previous;
+        }
+      }
+      await loadSignalAnalytics();
     });
   });
 }
 
-function saveSignalHistory(result, payload) {
+async function saveSignalHistory(result, payload) {
+  let signalId = 0;
+  try {
+    const response = await fetch("/api/signals/outcomes", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        symbol: payload.symbol,
+        timeframe: payload.timeframe,
+        action: String(result.trade_action || result.signal || "WAIT"),
+        confidence: Number(result.confidence || 0),
+        outcome: "pending",
+      }),
+    });
+    const data = await response.json();
+    if (response.ok) signalId = Number(data.signal_id || 0);
+  } catch (_err) {
+    signalId = 0;
+  }
+
   const rows = getSignalHistory();
   rows.unshift({
+    signal_id: signalId,
     ts: Date.now(),
     market_type: payload.market_type,
     exchange: payload.exchange,
@@ -278,6 +314,7 @@ function saveSignalHistory(result, payload) {
   });
   setSignalHistory(rows);
   renderSignalHistory();
+  await loadSignalAnalytics();
 }
 
 function setLoadingState(loading) {
@@ -701,7 +738,7 @@ function renderMetricNotes(result) {
   if (ai) ai.textContent = result.ai_explanation || "AI explanation unavailable; using rules-based guidance.";
 }
 
-function renderResult(result, payload = null) {
+async function renderResult(result, payload = null) {
   const profile = selectedRiskProfile();
   const cfg = RISK_PROFILES[profile] || RISK_PROFILES.moderate;
   const basePos = Number(result.recommended_position ?? 0);
@@ -724,7 +761,7 @@ function renderResult(result, payload = null) {
   window.__lastChartData = chartData;
   drawPriceModelChart(chartData);
 
-  if (payload) saveSignalHistory(result, payload);
+  if (payload) await saveSignalHistory(result, payload);
 }
 
 function readPayload(form) {
@@ -737,6 +774,32 @@ function readPayload(form) {
     timeframe: String(fd.get("timeframe") || "1h"),
     risk_profile: String(fd.get("risk_profile") || selectedRiskProfile()),
   };
+}
+
+async function loadSignalAnalytics() {
+  const host = document.getElementById("signal-analytics-chart");
+  const summary = document.getElementById("signal-analytics-summary");
+  if (!host || !summary || typeof Plotly === "undefined") return;
+  try {
+    const response = await fetch("/api/signals/analytics", { headers: authHeaders() });
+    const data = await response.json();
+    if (!response.ok) throw new Error(payloadMessage(data, "Failed to load analytics"));
+    const counts = data.counts || {};
+    const avg = data.avg_per_user || {};
+    const labels = ["Wins", "Losses", "Skipped", "Pending"];
+    const values = [Number(counts.win || 0), Number(counts.loss || 0), Number(counts.skip || 0), Number(counts.pending || 0)];
+    summary.textContent = `Signals: ${Number(data.total || 0)} | Users tracked: ${Number(data.users_with_signals || 0)} | Avg per user → W ${Number(avg.win || 0).toFixed(2)}, L ${Number(avg.loss || 0).toFixed(2)}, S ${Number(avg.skip || 0).toFixed(2)}, P ${Number(avg.pending || 0).toFixed(2)}`;
+    Plotly.react(host, [{ type: "bar", x: labels, y: values, marker: { color: ["#22c55e", "#ef4444", "#f59e0b", "#60a5fa"] } }], {
+      paper_bgcolor: "#0a1220",
+      plot_bgcolor: "#0a1220",
+      margin: { l: 40, r: 16, t: 8, b: 35 },
+      font: { color: "#dbeafe", size: 11 },
+      yaxis: { title: "Count", gridcolor: "rgba(255,255,255,0.08)" },
+      xaxis: { gridcolor: "rgba(255,255,255,0.05)" },
+    }, { responsive: true, displayModeBar: false });
+  } catch (err) {
+    summary.textContent = errorMessage(err, "Unable to load analytics.");
+  }
 }
 
 async function runPrediction(event) {
@@ -752,7 +815,7 @@ async function runPrediction(event) {
     const response = await fetch("/api/predict", { method: "POST", headers: authHeaders(), body: JSON.stringify(requestPayload) });
     const data = await response.json();
     if (!response.ok) throw new Error(payloadMessage(data, "Prediction failed"));
-    renderResult(data, payload);
+    await renderResult(data, payload);
   } catch (err) {
     renderSignal("wait", 0);
     const note = document.getElementById("signal-note");
@@ -832,6 +895,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   renderWatchlist();
   renderSignalHistory();
   maybeShowOnboarding();
+  await loadSignalAnalytics();
 
   if (predictForm) predictForm.addEventListener("submit", runPrediction);
 

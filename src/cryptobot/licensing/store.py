@@ -68,6 +68,25 @@ class LicensingStore:
 
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS signal_outcomes (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    symbol VARCHAR(32) NOT NULL,
+                    timeframe VARCHAR(16) NOT NULL,
+                    action VARCHAR(32) NOT NULL,
+                    confidence DOUBLE NOT NULL DEFAULT 0,
+                    outcome VARCHAR(16) NOT NULL DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_so_user (user_id),
+                    INDEX idx_so_outcome (outcome),
+                    CONSTRAINT fk_so_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE
+                )
+                """
+            )
+
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS email_verification_tokens (
                     id BIGINT AUTO_INCREMENT PRIMARY KEY,
                     user_id BIGINT NOT NULL,
@@ -141,6 +160,25 @@ class LicensingStore:
 
             if not self._column_exists(conn, "activation_licenses", "activation_key_value"):
                 cur.execute("ALTER TABLE activation_licenses ADD COLUMN activation_key_value VARCHAR(128) NULL")
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS signal_outcomes (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    symbol VARCHAR(32) NOT NULL,
+                    timeframe VARCHAR(16) NOT NULL,
+                    action VARCHAR(32) NOT NULL,
+                    confidence DOUBLE NOT NULL DEFAULT 0,
+                    outcome VARCHAR(16) NOT NULL DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_so_user (user_id),
+                    INDEX idx_so_outcome (outcome),
+                    CONSTRAINT fk_so_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE
+                )
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -461,6 +499,93 @@ class LicensingStore:
             return list(cur.fetchall())
         finally:
             conn.close()
+
+    def expire_active_licenses(self, now: datetime) -> int:
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE activation_licenses
+                SET status='expired'
+                WHERE status='active' AND expires_at IS NOT NULL AND expires_at <= %s
+                """,
+                (self._dt(now),),
+            )
+            conn.commit()
+            return int(cur.rowcount or 0)
+        finally:
+            conn.close()
+
+    def create_signal_outcome(self, user_id: int, symbol: str, timeframe: str, action: str, confidence: float, outcome: str = "pending") -> int:
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO signal_outcomes (user_id, symbol, timeframe, action, confidence, outcome)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (int(user_id), str(symbol), str(timeframe), str(action), float(confidence), str(outcome)),
+            )
+            conn.commit()
+            return int(cur.lastrowid)
+        finally:
+            conn.close()
+
+    def update_signal_outcome(self, signal_id: int, user_id: int, outcome: str) -> bool:
+        conn = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE signal_outcomes SET outcome=%s WHERE id=%s AND user_id=%s",
+                (str(outcome), int(signal_id), int(user_id)),
+            )
+            conn.commit()
+            return int(cur.rowcount or 0) > 0
+        finally:
+            conn.close()
+
+    def signal_outcomes_analytics(self) -> dict[str, Any]:
+        conn = self._connect()
+        try:
+            if not self._table_exists(conn, "signal_outcomes"):
+                return {"counts": {"win": 0, "loss": 0, "skip": 0, "pending": 0}, "total": 0, "users_with_signals": 0, "avg_per_user": {"win": 0.0, "loss": 0.0, "skip": 0.0, "pending": 0.0}}
+            cur = conn.cursor(dictionary=True)
+            cur.execute(
+                """
+                SELECT
+                  COALESCE(SUM(CASE WHEN outcome='win' THEN 1 ELSE 0 END),0) AS wins,
+                  COALESCE(SUM(CASE WHEN outcome='loss' THEN 1 ELSE 0 END),0) AS losses,
+                  COALESCE(SUM(CASE WHEN outcome='skip' THEN 1 ELSE 0 END),0) AS skips,
+                  COALESCE(SUM(CASE WHEN outcome='pending' THEN 1 ELSE 0 END),0) AS pendings,
+                  COUNT(*) AS total,
+                  COUNT(DISTINCT user_id) AS users_with_signals
+                FROM signal_outcomes
+                """
+            )
+            row = cur.fetchone() or {}
+            wins = int(row.get("wins") or 0)
+            losses = int(row.get("losses") or 0)
+            skips = int(row.get("skips") or 0)
+            pendings = int(row.get("pendings") or 0)
+            total = int(row.get("total") or 0)
+            users = int(row.get("users_with_signals") or 0)
+            denom = users if users > 0 else 1
+            return {
+                "counts": {"win": wins, "loss": losses, "skip": skips, "pending": pendings},
+                "total": total,
+                "users_with_signals": users,
+                "avg_per_user": {
+                    "win": round(wins / denom, 4) if users else 0.0,
+                    "loss": round(losses / denom, 4) if users else 0.0,
+                    "skip": round(skips / denom, 4) if users else 0.0,
+                    "pending": round(pendings / denom, 4) if users else 0.0,
+                },
+            }
+        finally:
+            conn.close()
+
 
     # Admin methods
     def list_users(self, limit: int = 200) -> list[dict[str, Any]]:
