@@ -874,6 +874,12 @@ def create_app() -> FastAPI:
             "avg_wf_brier": round(sum(wf_brier_vals) / len(wf_brier_vals), 6) if wf_brier_vals else 0.0,
         }
         return JSONResponse({"overview": overview, "items": items, "cache": cache})
+
+    @app.get("/api/admin/signals/analytics")
+    async def admin_signal_analytics(request: Request):
+        _require_admin(request)
+        return JSONResponse(jsonable_encoder(_svc().signal_outcomes_analytics()))
+
     return app
 
 
@@ -889,7 +895,6 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
-
 
 
 
