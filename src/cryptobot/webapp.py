@@ -708,11 +708,6 @@ def create_app() -> FastAPI:
         user_id = _require_user_id(request)
         return JSONResponse({"items": _svc().list_user_subscriptions(user_id=user_id, limit=limit)})
 
-    @app.get("/api/signals/analytics")
-    async def signal_analytics(request: Request):
-        _require_user_id(request)
-        return JSONResponse(jsonable_encoder(_svc().signal_outcomes_analytics()))
-
     @app.post("/api/signals/outcomes")
     async def create_signal_outcome(request: Request, payload: SignalOutcomeCreatePayload):
         user_id = _require_user_id(request)

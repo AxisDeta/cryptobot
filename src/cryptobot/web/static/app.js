@@ -1,4 +1,4 @@
-﻿function getDeviceId() {
+function getDeviceId() {
   const key = "ctb_device_id";
   let val = localStorage.getItem(key);
   if (!val) {
@@ -275,7 +275,6 @@ function renderSignalHistory() {
           sel.value = previous;
         }
       }
-      await loadSignalAnalytics();
     });
   });
 }
@@ -314,7 +313,6 @@ async function saveSignalHistory(result, payload) {
   });
   setSignalHistory(rows);
   renderSignalHistory();
-  await loadSignalAnalytics();
 }
 
 function setLoadingState(loading) {
@@ -776,31 +774,7 @@ function readPayload(form) {
   };
 }
 
-async function loadSignalAnalytics() {
-  const host = document.getElementById("signal-analytics-chart");
-  const summary = document.getElementById("signal-analytics-summary");
-  if (!host || !summary || typeof Plotly === "undefined") return;
-  try {
-    const response = await fetch("/api/signals/analytics", { headers: authHeaders() });
-    const data = await response.json();
-    if (!response.ok) throw new Error(payloadMessage(data, "Failed to load analytics"));
-    const counts = data.counts || {};
-    const avg = data.avg_per_user || {};
-    const labels = ["Wins", "Losses", "Skipped", "Pending"];
-    const values = [Number(counts.win || 0), Number(counts.loss || 0), Number(counts.skip || 0), Number(counts.pending || 0)];
-    summary.textContent = `Signals: ${Number(data.total || 0)} | Users tracked: ${Number(data.users_with_signals || 0)} | Avg per user → W ${Number(avg.win || 0).toFixed(2)}, L ${Number(avg.loss || 0).toFixed(2)}, S ${Number(avg.skip || 0).toFixed(2)}, P ${Number(avg.pending || 0).toFixed(2)}`;
-    Plotly.react(host, [{ type: "bar", x: labels, y: values, marker: { color: ["#22c55e", "#ef4444", "#f59e0b", "#60a5fa"] } }], {
-      paper_bgcolor: "#0a1220",
-      plot_bgcolor: "#0a1220",
-      margin: { l: 40, r: 16, t: 8, b: 35 },
-      font: { color: "#dbeafe", size: 11 },
-      yaxis: { title: "Count", gridcolor: "rgba(255,255,255,0.08)" },
-      xaxis: { gridcolor: "rgba(255,255,255,0.05)" },
-    }, { responsive: true, displayModeBar: false });
-  } catch (err) {
-    summary.textContent = errorMessage(err, "Unable to load analytics.");
-  }
-}
+
 
 async function runPrediction(event) {
   event.preventDefault();
@@ -895,7 +869,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   renderWatchlist();
   renderSignalHistory();
   maybeShowOnboarding();
-  await loadSignalAnalytics();
 
   if (predictForm) predictForm.addEventListener("submit", runPrediction);
 
@@ -971,6 +944,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await checkLicenseStatus();
   await loadSubscriptions();
 });
+
 
 
 
