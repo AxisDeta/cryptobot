@@ -49,6 +49,12 @@ class LicensingService:
             return False
         return bool(rows)
 
+    def _expire_stale_licenses(self) -> None:
+        try:
+            self.store.expire_active_licenses(utcnow())
+        except Exception:
+            return
+
     def ensure_signup_trial(self, user_id: int, email: str) -> str | None:
         if self._user_has_any_license(user_id):
             return None
@@ -161,6 +167,7 @@ class LicensingService:
         return True
 
     def login_email(self, email: str, password: str) -> dict[str, Any] | None:
+        self._expire_stale_licenses()
         normalized = (email or "").strip().lower()
         user = self.store.get_user_by_email(normalized)
         if not user:
@@ -175,6 +182,7 @@ class LicensingService:
         return user
 
     def login_google(self, *, email: str, sub: str) -> int:
+        self._expire_stale_licenses()
         normalized = email.strip().lower()
         user_id = self.store.upsert_google_user(email=normalized, google_sub=sub, is_admin=self._is_admin_email(email))
         self.ensure_signup_trial(user_id=int(user_id), email=normalized)
@@ -233,6 +241,7 @@ class LicensingService:
         }
 
     def activate_key_for_user(self, user_id: int, activation_key: str, device_id: str) -> dict[str, Any]:
+        self._expire_stale_licenses()
         if not activation_key or not device_id:
             raise ValueError("Activation key and device id are required")
 
@@ -266,6 +275,7 @@ class LicensingService:
         }
 
     def validate_key_for_user_device(self, user_id: int, activation_key: str, _device_id: str) -> bool:
+        self._expire_stale_licenses()
         try:
             row = self.store.get_license_by_key_hash(hash_value(activation_key.strip()))
             if not row or row.get("status") != "active":
@@ -278,6 +288,28 @@ class LicensingService:
             return True
         except Exception:
             return False
+
+    def create_signal_outcome(self, user_id: int, symbol: str, timeframe: str, action: str, confidence: float, outcome: str = "pending") -> int:
+        return self.store.create_signal_outcome(user_id=user_id, symbol=symbol, timeframe=timeframe, action=action, confidence=confidence, outcome=outcome)
+
+    def update_signal_outcome(self, signal_id: int, user_id: int, outcome: str) -> bool:
+        return self.store.update_signal_outcome(signal_id=signal_id, user_id=user_id, outcome=outcome)
+
+    def signal_outcomes_analytics(self) -> dict[str, Any]:
+        data = self.store.signal_outcomes_analytics()
+        total = int(data.get("total") or 0)
+        counts = data.get("counts") or {}
+        if total > 0:
+            data["percentages"] = {
+                "win": round((int(counts.get("win") or 0) / total) * 100.0, 2),
+                "loss": round((int(counts.get("loss") or 0) / total) * 100.0, 2),
+                "skip": round((int(counts.get("skip") or 0) / total) * 100.0, 2),
+                "pending": round((int(counts.get("pending") or 0) / total) * 100.0, 2),
+            }
+        else:
+            data["percentages"] = {"win": 0.0, "loss": 0.0, "skip": 0.0, "pending": 0.0}
+        return data
+
 
     # Admin service wrappers
     def is_admin_user(self, user_id: int) -> bool:
@@ -324,6 +356,7 @@ class LicensingService:
         return None
 
     def list_user_subscriptions(self, user_id: int, limit: int = 30) -> list[dict[str, Any]]:
+        self._expire_stale_licenses()
         items = self.store.list_user_licenses(user_id=user_id, limit=limit)
         normalized: list[dict[str, Any]] = []
         for row in items:

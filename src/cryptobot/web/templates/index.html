@@ -144,18 +144,21 @@
           </div>
         </div>
 
-        <div id="advanced-metrics" class="cards">
-          <article class="metric"><h3>Up Probability</h3><p id="direction_prob_up">--</p></article>
-          <article class="metric"><h3>Confidence</h3><p id="confidence">--</p></article>
-          <article class="metric"><h3>Expected Volatility</h3><p id="expected_volatility">--</p></article>
-          <article class="metric"><h3>Position Size</h3><p id="recommended_position">--</p></article>
-        </div>
-        <div id="advanced-notes" class="metric-notes">
-          <p id="direction_prob_up_note" class="hint">Up Probability: --</p>
-          <p id="confidence_note" class="hint">Confidence: --</p>
-          <p id="expected_volatility_note" class="hint">Expected Volatility: --</p>
-          <p id="recommended_position_note" class="hint">Position Size: --</p>
-        </div>
+        <details class="collapsible" open>
+          <summary>Advanced Metrics</summary>
+          <div id="advanced-metrics" class="cards">
+            <article class="metric"><h3>Up Probability</h3><p id="direction_prob_up">--</p></article>
+            <article class="metric"><h3>Confidence</h3><p id="confidence">--</p></article>
+            <article class="metric"><h3>Expected Volatility</h3><p id="expected_volatility">--</p></article>
+            <article class="metric"><h3>Position Size</h3><p id="recommended_position">--</p></article>
+          </div>
+          <div id="advanced-notes" class="metric-notes">
+            <p id="direction_prob_up_note" class="hint">Up Probability: --</p>
+            <p id="confidence_note" class="hint">Confidence: --</p>
+            <p id="expected_volatility_note" class="hint">Expected Volatility: --</p>
+            <p id="recommended_position_note" class="hint">Position Size: --</p>
+          </div>
+        </details>
 
         <div id="explain-panel" class="explain-panel">
           <p><strong>What this means:</strong> <span id="explain-summary">Waiting for first signal.</span></p>
@@ -176,10 +179,11 @@
           <span id="quality-insight">Reliability: --</span>
         </div>
 
-        <div class="history-panel">
-          <h3>Recent Signals</h3>
+        <details class="history-panel collapsible" open>
+          <summary>Recent Signals</summary>
           <div id="signal-history" class="hint">No signals yet.</div>
-        </div>
+        </details>
+
       </section>
 
       <section class="panel chart-panel">
@@ -204,8 +208,7 @@
       </section>
     </main>
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-    <script src="/static/app.js?v=20260310c"></script>
+    <script src="/static/app.js?v=20260312a"></script>
   </body>
 </html>
-
 

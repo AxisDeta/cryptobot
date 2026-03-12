@@ -81,6 +81,33 @@ async function postJson(url, payload) {
   return data;
 }
 
+function renderSignalAnalytics(data) {
+  const host = document.getElementById("signal-analytics-chart");
+  const summary = document.getElementById("signal-analytics-summary");
+  if (!host || !summary) return;
+
+  const counts = data.counts || {};
+  const avg = data.avg_per_user || {};
+  const labels = ["Wins", "Losses", "Skipped", "Pending"];
+  const values = [Number(counts.win || 0), Number(counts.loss || 0), Number(counts.skip || 0), Number(counts.pending || 0)];
+
+  summary.textContent = `Signals: ${Number(data.total || 0)} | Users tracked: ${Number(data.users_with_signals || 0)} | Avg per user → W ${Number(avg.win || 0).toFixed(2)}, L ${Number(avg.loss || 0).toFixed(2)}, S ${Number(avg.skip || 0).toFixed(2)}, P ${Number(avg.pending || 0).toFixed(2)}`;
+
+  if (typeof Plotly === "undefined") {
+    host.textContent = "Chart library unavailable.";
+    return;
+  }
+
+  Plotly.react(host, [{ type: "bar", x: labels, y: values, marker: { color: ["#22c55e", "#ef4444", "#f59e0b", "#60a5fa"] } }], {
+    paper_bgcolor: "#0a1220",
+    plot_bgcolor: "#0a1220",
+    margin: { l: 40, r: 16, t: 8, b: 35 },
+    font: { color: "#dbeafe", size: 11 },
+    yaxis: { title: "Count", gridcolor: "rgba(255,255,255,0.08)" },
+    xaxis: { gridcolor: "rgba(255,255,255,0.05)" },
+  }, { responsive: true, displayModeBar: false });
+}
+
 function renderOverview(data) {
   const container = document.getElementById("overview-cards");
   if (!container) return;
@@ -220,17 +247,19 @@ function setSectionError(sectionId, msg) {
   host.appendChild(p);
 }
 async function refreshAll() {
-  const [overview, users, licenses, payments] = await Promise.all([
+  const [overview, users, licenses, payments, signalAnalytics] = await Promise.all([
     safeGet("/api/admin/overview", { users: 0, active_users: 0, active_licenses: 0, completed_payments: 0, prediction_runs: 0 }),
     safeGet("/api/admin/users?limit=300", { items: [] }),
     safeGet("/api/admin/licenses?limit=500", { items: [] }),
     safeGet("/api/admin/payments?limit=500", { items: [] }),
+    safeGet("/api/admin/signals/analytics", { total: 0, users_with_signals: 0, counts: {}, avg_per_user: {} }),
   ]);
 
   renderOverview(overview || {});
   renderUsers((users && users.items) || []);
   renderLicenses((licenses && licenses.items) || []);
   renderPayments((payments && payments.items) || []);
+  renderSignalAnalytics(signalAnalytics || {});
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -244,4 +273,3 @@ window.addEventListener("DOMContentLoaded", async () => {
     document.body.append(el("p", String(err)));
   }
 });
-

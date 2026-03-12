@@ -69,7 +69,7 @@ function payloadMessage(payload, fallback = "Request failed") {
       const msgs = payload.detail.map((d) => payloadMessage(d, "")).filter(Boolean);
       if (msgs.length) return msgs.join("; ");
     }
-    try { return JSON.stringify(requestPayload); } catch (_err) { return fallback; }
+    try { return JSON.stringify(payload); } catch (_err) { return fallback; }
   }
   return String(payload);
 }
@@ -251,22 +251,57 @@ function renderSignalHistory() {
   }
   host.innerHTML = items.map((row, idx) => {
     const t = row.ts ? new Date(row.ts).toLocaleString() : "-";
-    return `<div class=\"history-item\"><strong>${row.action}</strong> ${row.symbol} (${row.timeframe}) | conf ${fmtPct(row.confidence)} | ${t}<br/><label>Outcome <select data-history-idx=\"${idx}\"><option value=\"pending\" ${row.outcome === "pending" ? "selected" : ""}>Pending</option><option value=\"win\" ${row.outcome === "win" ? "selected" : ""}>Win</option><option value=\"loss\" ${row.outcome === "loss" ? "selected" : ""}>Loss</option><option value=\"skip\" ${row.outcome === "skip" ? "selected" : ""}>Skipped</option></select></label></div>`;
+    return `<div class="history-item"><strong>${row.action}</strong> ${row.symbol} (${row.timeframe}) | conf ${fmtPct(row.confidence)} | ${t}<br/><label>Outcome <select data-history-idx="${idx}" data-signal-id="${Number(row.signal_id || 0)}"><option value="pending" ${row.outcome === "pending" ? "selected" : ""}>Pending</option><option value="win" ${row.outcome === "win" ? "selected" : ""}>Win</option><option value="loss" ${row.outcome === "loss" ? "selected" : ""}>Loss</option><option value="skip" ${row.outcome === "skip" ? "selected" : ""}>Skipped</option></select></label></div>`;
   }).join("");
   host.querySelectorAll("select[data-history-idx]").forEach((sel) => {
-    sel.addEventListener("change", () => {
+    sel.addEventListener("change", async () => {
       const idx = Number(sel.getAttribute("data-history-idx") || -1);
       const rows = getSignalHistory();
       if (!rows[idx]) return;
+      const previous = rows[idx].outcome || "pending";
       rows[idx].outcome = String(sel.value || "pending");
       setSignalHistory(rows);
+      const signalId = Number(sel.getAttribute("data-signal-id") || rows[idx].signal_id || 0);
+      if (signalId > 0) {
+        try {
+          await fetch(`/api/signals/outcomes/${signalId}`, {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify({ outcome: rows[idx].outcome }),
+          });
+        } catch (_err) {
+          rows[idx].outcome = previous;
+          setSignalHistory(rows);
+          sel.value = previous;
+        }
+      }
     });
   });
 }
 
-function saveSignalHistory(result, payload) {
+async function saveSignalHistory(result, payload) {
+  let signalId = 0;
+  try {
+    const response = await fetch("/api/signals/outcomes", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        symbol: payload.symbol,
+        timeframe: payload.timeframe,
+        action: String(result.trade_action || result.signal || "WAIT"),
+        confidence: Number(result.confidence || 0),
+        outcome: "pending",
+      }),
+    });
+    const data = await response.json();
+    if (response.ok) signalId = Number(data.signal_id || 0);
+  } catch (_err) {
+    signalId = 0;
+  }
+
   const rows = getSignalHistory();
   rows.unshift({
+    signal_id: signalId,
     ts: Date.now(),
     market_type: payload.market_type,
     exchange: payload.exchange,
@@ -701,7 +736,7 @@ function renderMetricNotes(result) {
   if (ai) ai.textContent = result.ai_explanation || "AI explanation unavailable; using rules-based guidance.";
 }
 
-function renderResult(result, payload = null) {
+async function renderResult(result, payload = null) {
   const profile = selectedRiskProfile();
   const cfg = RISK_PROFILES[profile] || RISK_PROFILES.moderate;
   const basePos = Number(result.recommended_position ?? 0);
@@ -724,7 +759,7 @@ function renderResult(result, payload = null) {
   window.__lastChartData = chartData;
   drawPriceModelChart(chartData);
 
-  if (payload) saveSignalHistory(result, payload);
+  if (payload) await saveSignalHistory(result, payload);
 }
 
 function readPayload(form) {
@@ -752,7 +787,7 @@ async function runPrediction(event) {
     const response = await fetch("/api/predict", { method: "POST", headers: authHeaders(), body: JSON.stringify(requestPayload) });
     const data = await response.json();
     if (!response.ok) throw new Error(payloadMessage(data, "Prediction failed"));
-    renderResult(data, payload);
+    await renderResult(data, payload);
   } catch (err) {
     renderSignal("wait", 0);
     const note = document.getElementById("signal-note");
