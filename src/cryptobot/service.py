@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from cryptobot.schemas import OHLCVBar
+
 from cryptobot.backtest.simulator import run_backtest
 from cryptobot.config import BotSettings
 from cryptobot.data.market import CCXTMarketDataClient, ForexMarketDataClient
@@ -337,6 +339,57 @@ def _build_ai_explanation(settings: BotSettings, request: LivePredictionRequest,
         return _fallback_ai_explanation(result), "error"
 
 
+
+
+def _fetch_crypto_via_yfinance(symbol: str, timeframe: str, limit: int):
+    try:
+        import pandas as pd  # type: ignore
+        import yfinance as yf  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("Crypto fallback requires yfinance") from exc
+
+    s = symbol.strip().upper().replace("/", "-")
+    if s.endswith("-USDT"):
+        s = s[:-5] + "-USD"
+
+    interval_map = {
+        "1m": "1m",
+        "2m": "2m",
+        "5m": "5m",
+        "15m": "15m",
+        "30m": "30m",
+        "1h": "60m",
+        "4h": "60m",
+        "1d": "1d",
+        "1w": "1wk",
+    }
+    interval = interval_map.get(timeframe, "60m")
+    period = "60d" if interval.endswith("m") else "2y"
+
+    df = yf.download(s, period=period, interval=interval, progress=False, auto_adjust=False, threads=False)
+    if df is None or getattr(df, "empty", True):
+        raise RuntimeError(f"No crypto candles from fallback provider for {symbol}")
+
+    bars = []
+    frame = pd.DataFrame(df).tail(int(limit))
+    for ts, row in frame.iterrows():
+        o = row.get("Open")
+        h = row.get("High")
+        l = row.get("Low")
+        c = row.get("Close")
+        v = row.get("Volume", 0.0)
+        if any(pd.isna(x) for x in [o, h, l, c]):
+            continue
+        ts_dt = ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts
+        if getattr(ts_dt, "tzinfo", None) is not None:
+            ts_dt = ts_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        bars.append(OHLCVBar(ts=ts_dt, open=float(o), high=float(h), low=float(l), close=float(c), volume=float(v or 0.0)))
+
+    if not bars:
+        raise RuntimeError(f"Fallback provider returned unusable candle rows for {symbol}")
+    return bars
+
+
 def _fetch_crypto(settings: BotSettings, request: LivePredictionRequest, symbol: str, timeframe: str):
     def _fetch_bars_task():
         client = CCXTMarketDataClient(request.exchange)
@@ -360,11 +413,22 @@ def _fetch_crypto(settings: BotSettings, request: LivePredictionRequest, symbol:
         orderbook_f = pool.submit(_fetch_orderbook_task)
         reddit_f = pool.submit(load_reddit_posts, settings, list(request.subreddits), request.reddit_limit)
 
-        bars, used_timeframe, used_fallback_timeframe = bars_f.result()
+        crypto_fetch_error: Exception | None = None
+        try:
+            bars, used_timeframe, used_fallback_timeframe = bars_f.result()
+        except Exception as exc:
+            crypto_fetch_error = exc
+            bars = _fetch_crypto_via_yfinance(symbol=symbol, timeframe=timeframe, limit=request.ohlcv_limit)
+            used_timeframe = timeframe
+            used_fallback_timeframe = True
+
         try:
             order_book = orderbook_f.result(timeout=2.0)
         except Exception:
             order_book = None
+
+    if crypto_fetch_error is not None:
+        order_book = None
 
     reddit_status = "ok"
     try:

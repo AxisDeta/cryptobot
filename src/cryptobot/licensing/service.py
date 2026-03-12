@@ -40,6 +40,23 @@ class LicensingService:
         admin_set = {x.strip().lower() for x in raw.split(",") if x.strip()}
         return email.strip().lower() in admin_set
 
+    def _user_has_any_license(self, user_id: int) -> bool:
+        if not hasattr(self.store, "list_user_licenses"):
+            return False
+        try:
+            rows = self.store.list_user_licenses(user_id=int(user_id), limit=1)
+        except Exception:
+            return False
+        return bool(rows)
+
+    def ensure_signup_trial(self, user_id: int, email: str) -> str | None:
+        if self._user_has_any_license(user_id):
+            return None
+        try:
+            return self._grant_signup_trial(user_id=user_id, email=email)
+        except Exception:
+            return None
+
     def signup_email(self, email: str, password: str) -> dict[str, Any]:
         email = (email or "").strip().lower()
         if not email or "@" not in email:
@@ -60,7 +77,47 @@ class LicensingService:
         token = new_token(24)
         self.store.create_email_verification(user_id=user_id, token_hash=hash_value(token), expires_at=utcnow() + timedelta(minutes=30))
         sent = send_verification_email(self.settings, email, token)
-        return {"user_id": user_id, "verification_email_sent": bool(sent)}
+        trial_activation_key = self.ensure_signup_trial(user_id=user_id, email=email)
+        return {
+            "user_id": user_id,
+            "verification_email_sent": bool(sent),
+            "trial_activation_key": trial_activation_key,
+            "trial_duration_days": 1 if trial_activation_key else 0,
+        }
+
+    def _grant_signup_trial(self, user_id: int, email: str) -> str:
+        activation_key = new_activation_key()
+        trial_reference = f"trial_{uuid.uuid4().hex[:24]}"
+        payment_id = self.store.create_payment(
+            user_id=int(user_id),
+            provider="trial",
+            reference=trial_reference,
+            plan_code="trial_1d",
+            currency="USD",
+            amount_cents=0,
+            status="completed",
+        )
+        license_id = self.store.create_license(
+            user_id=int(user_id),
+            payment_id=int(payment_id),
+            plan_code="trial_1d",
+            duration_days=1,
+            activation_key_hash=hash_value(activation_key),
+            activation_key_hint=key_hint(activation_key),
+            activation_key_value=activation_key,
+            status="issued",
+            issued_at=utcnow(),
+            activation_deadline_at=activation_deadline(),
+        )
+        now = utcnow()
+        self.store.activate_license(
+            int(license_id),
+            device_id="account_trial",
+            activated_at=now,
+            expires_at=now + timedelta(days=1),
+        )
+        send_activation_key_email(self.settings, email, activation_key, "1-Day Free Trial")
+        return activation_key
 
     def verify_email(self, token: str) -> int | None:
         token_hash = hash_value(token)
@@ -104,7 +161,8 @@ class LicensingService:
         return True
 
     def login_email(self, email: str, password: str) -> dict[str, Any] | None:
-        user = self.store.get_user_by_email((email or "").strip().lower())
+        normalized = (email or "").strip().lower()
+        user = self.store.get_user_by_email(normalized)
         if not user:
             return None
         if not bool(user.get("is_active", 1)):
@@ -113,10 +171,14 @@ class LicensingService:
             return None
         if not verify_password(password, str(user["password_hash"])):
             return None
+        self.ensure_signup_trial(user_id=int(user["id"]), email=normalized)
         return user
 
     def login_google(self, *, email: str, sub: str) -> int:
-        return self.store.upsert_google_user(email=email.strip().lower(), google_sub=sub, is_admin=self._is_admin_email(email))
+        normalized = email.strip().lower()
+        user_id = self.store.upsert_google_user(email=normalized, google_sub=sub, is_admin=self._is_admin_email(email))
+        self.ensure_signup_trial(user_id=int(user_id), email=normalized)
+        return user_id
 
     def create_checkout_record(self, user_id: int, provider: str, plan_code: str, amount_cents: int, currency: str) -> str:
         if plan_code not in PLANS:
@@ -194,8 +256,6 @@ class LicensingService:
 
         if row["status"] != "active":
             raise ValueError("License is not active")
-        if row.get("bound_device_id") and row["bound_device_id"] != device_id:
-            raise ValueError("Activation key is already bound to another device")
         if row.get("expires_at") and row["expires_at"] < now:
             raise ValueError("License expired")
 
@@ -205,14 +265,12 @@ class LicensingService:
             "plan_code": row.get("plan_code"),
         }
 
-    def validate_key_for_user_device(self, user_id: int, activation_key: str, device_id: str) -> bool:
+    def validate_key_for_user_device(self, user_id: int, activation_key: str, _device_id: str) -> bool:
         try:
             row = self.store.get_license_by_key_hash(hash_value(activation_key.strip()))
             if not row or row.get("status") != "active":
                 return False
             if int(row.get("user_id") or 0) != int(user_id):
-                return False
-            if row.get("bound_device_id") != device_id:
                 return False
             now = utcnow().replace(tzinfo=None)
             if row.get("expires_at") is None or row["expires_at"] <= now:
@@ -252,6 +310,19 @@ class LicensingService:
 
     def admin_list_prediction_runs(self, limit: int = 300) -> list[dict[str, Any]]:
         return self.store.list_prediction_runs(limit=limit)
+    def get_preferred_activation_key(self, user_id: int) -> str | None:
+        try:
+            rows = self.store.list_user_licenses(user_id=int(user_id), limit=30)
+        except Exception:
+            return None
+        for row in rows:
+            if str(row.get("status") or "").lower() == "active" and row.get("activation_key"):
+                return str(row.get("activation_key"))
+        for row in rows:
+            if str(row.get("status") or "").lower() == "issued" and row.get("activation_key"):
+                return str(row.get("activation_key"))
+        return None
+
     def list_user_subscriptions(self, user_id: int, limit: int = 30) -> list[dict[str, Any]]:
         items = self.store.list_user_licenses(user_id=user_id, limit=limit)
         normalized: list[dict[str, Any]] = []
@@ -263,7 +334,6 @@ class LicensingService:
                     item[key] = value.isoformat()
             normalized.append(item)
         return normalized
-
 
 
 

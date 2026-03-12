@@ -38,6 +38,20 @@ class _FakeForexClient:
         return OrderBookSnapshot(datetime(2025, 1, 1), 0.0, 0.0)
 
 
+
+
+class _FailingCryptoClient:
+    def __init__(self, _exchange: str) -> None:
+        pass
+
+    def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int = 240):
+        raise RuntimeError("ccxt unavailable")
+
+    def fetch_order_book_imbalance(self, symbol: str, depth: int = 20):
+        raise RuntimeError("ccxt unavailable")
+
+
+
 class ServiceTests(unittest.TestCase):
     @patch("cryptobot.service.CCXTMarketDataClient", _FakeMarketClient)
     @patch("cryptobot.service.load_reddit_posts")
@@ -51,6 +65,24 @@ class ServiceTests(unittest.TestCase):
         self.assertIn("recommended_position", result)
         self.assertIn("confidence", result)
         self.assertEqual(result.get("market_type"), "crypto")
+
+
+    @patch("cryptobot.service.CCXTMarketDataClient", _FailingCryptoClient)
+    @patch("cryptobot.service._fetch_crypto_via_yfinance")
+    @patch("cryptobot.service.load_reddit_posts")
+    def test_generate_live_prediction_crypto_ccxt_fallback_to_yfinance(self, mock_reddit, mock_fallback):
+        mock_reddit.return_value = []
+        base = datetime(2025, 1, 1)
+        mock_fallback.return_value = [
+            OHLCVBar(base + timedelta(hours=i), 100 + i, 101 + i, 99 + i, 100 + i, 1000 + i)
+            for i in range(80)
+        ]
+        settings = BotSettings()
+        req = LivePredictionRequest(market_type="crypto", symbol="BTC/USDT", timeframe="1h", ohlcv_limit=80)
+        result = generate_live_prediction(settings, req)
+        self.assertEqual(result.get("market_type"), "crypto")
+        self.assertIn("confidence", result)
+        mock_fallback.assert_called_once()
 
     @patch("cryptobot.service.ForexMarketDataClient", _FakeForexClient)
     def test_generate_live_prediction_forex(self):

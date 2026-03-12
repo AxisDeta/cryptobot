@@ -243,12 +243,20 @@ def create_app() -> FastAPI:
 
     @app.post("/api/auth/login")
     async def auth_login(request: Request, payload: LoginPayload):
-        user = _svc().login_email(payload.email, payload.password)
+        svc = _svc()
+        user = svc.login_email(payload.email, payload.password)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
-        request.session["user_id"] = int(user["id"])
+        user_id = int(user["id"])
+        request.session["user_id"] = user_id
         request.session["email"] = str(user["email"])
-        return JSONResponse({"success": True})
+        return JSONResponse(
+            {
+                "success": True,
+                "user_is_admin": bool(user.get("is_admin")),
+                "activation_key": svc.get_preferred_activation_key(user_id),
+            }
+        )
 
     @app.post("/api/auth/forgot-password")
     async def auth_forgot_password(request: Request):
@@ -674,11 +682,14 @@ def create_app() -> FastAPI:
     @app.get("/api/license/status")
     async def license_status(request: Request):
         user_id = _require_user_id(request)
+        svc = _svc()
+        if svc.is_admin_user(user_id):
+            return JSONResponse({"active": True, "admin_bypass": True})
         key = request.headers.get("x-activation-key", "").strip()
         device_id = request.headers.get("x-device-id", "").strip()
-        if not key or not device_id:
+        if not key:
             return JSONResponse({"active": False})
-        return JSONResponse({"active": _svc().validate_key_for_user_device(user_id, key, device_id)})
+        return JSONResponse({"active": svc.validate_key_for_user_device(user_id, key, device_id)})
 
     @app.get("/api/license/subscriptions")
     async def license_subscriptions(request: Request, limit: int = 30):
@@ -688,10 +699,11 @@ def create_app() -> FastAPI:
     @app.post("/api/predict")
     async def predict(request: Request, payload: PredictPayload):
         user_id = _require_user_id(request)
+        svc = _svc()
         key = request.headers.get("x-activation-key", "").strip()
         device_id = request.headers.get("x-device-id", "").strip()
-        if not key or not device_id or not _svc().validate_key_for_user_device(user_id, key, device_id):
-            raise HTTPException(status_code=401, detail="Active license required for this account/device")
+        if not svc.is_admin_user(user_id) and (not key or not svc.validate_key_for_user_device(user_id, key, device_id)):
+            raise HTTPException(status_code=401, detail="Active license required for this account")
         try:
             result = generate_live_prediction(
                 BotSettings.from_env(),
@@ -707,7 +719,7 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid request") from exc
         except Exception as exc:
-            raise HTTPException(status_code=500, detail="Prediction engine failed. Please retry.") from exc
+            raise HTTPException(status_code=500, detail=f"Prediction engine failed: {exc}") from exc
 
     # Admin APIs
     # Admin APIs

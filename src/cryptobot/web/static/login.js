@@ -38,7 +38,8 @@ async function signup() {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.detail || "Signup failed");
-  setAccountMsg("Signup successful. Check your email verification link.", true);
+  const trialKey = data.trial_activation_key ? ` Trial key: ${data.trial_activation_key}` : "";
+  setAccountMsg(`Signup successful. Check your email verification link.${trialKey}`, true);
 }
 
 async function login() {
@@ -51,6 +52,9 @@ async function login() {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.detail || "Login failed");
+  if (data && data.activation_key) {
+    try { localStorage.setItem("ctb_activation_key", String(data.activation_key).trim()); } catch (_err) { /* ignore */ }
+  }
   window.location.href = "/app";
 }
 
