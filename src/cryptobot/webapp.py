@@ -59,6 +59,18 @@ class ActivatePayload(BaseModel):
     device_id: str
 
 
+class SignalOutcomeCreatePayload(BaseModel):
+    symbol: str
+    timeframe: str
+    action: str
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    outcome: str = Field(default="pending", pattern="^(pending|win|loss|skip)$")
+
+
+class SignalOutcomeUpdatePayload(BaseModel):
+    outcome: str = Field(pattern="^(pending|win|loss|skip)$")
+
+
 class AdminUserPatchPayload(BaseModel):
     is_admin: bool | None = None
     is_active: bool | None = None
@@ -695,6 +707,32 @@ def create_app() -> FastAPI:
     async def license_subscriptions(request: Request, limit: int = 30):
         user_id = _require_user_id(request)
         return JSONResponse({"items": _svc().list_user_subscriptions(user_id=user_id, limit=limit)})
+
+    @app.get("/api/signals/analytics")
+    async def signal_analytics(request: Request):
+        _require_user_id(request)
+        return JSONResponse(jsonable_encoder(_svc().signal_outcomes_analytics()))
+
+    @app.post("/api/signals/outcomes")
+    async def create_signal_outcome(request: Request, payload: SignalOutcomeCreatePayload):
+        user_id = _require_user_id(request)
+        signal_id = _svc().create_signal_outcome(
+            user_id=user_id,
+            symbol=payload.symbol,
+            timeframe=payload.timeframe,
+            action=payload.action,
+            confidence=payload.confidence,
+            outcome=payload.outcome,
+        )
+        return JSONResponse({"success": True, "signal_id": signal_id})
+
+    @app.post("/api/signals/outcomes/{signal_id}")
+    async def update_signal_outcome(request: Request, signal_id: int, payload: SignalOutcomeUpdatePayload):
+        user_id = _require_user_id(request)
+        ok = _svc().update_signal_outcome(signal_id=signal_id, user_id=user_id, outcome=payload.outcome)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Signal record not found")
+        return JSONResponse({"success": True})
 
     @app.post("/api/predict")
     async def predict(request: Request, payload: PredictPayload):
