@@ -348,9 +348,17 @@ def _fetch_crypto_via_yfinance(symbol: str, timeframe: str, limit: int):
     except Exception as exc:
         raise RuntimeError("Crypto fallback requires yfinance") from exc
 
-    s = symbol.strip().upper().replace("/", "-")
-    if s.endswith("-USDT"):
-        s = s[:-5] + "-USD"
+    def _symbol_candidates(raw: str) -> list[str]:
+        base = raw.strip().upper().replace("/", "-")
+        candidates = [base]
+        if base.endswith("-USDT"):
+            candidates.append(base[:-5] + "-USD")
+        if "-" in base:
+            base_asset, quote_asset = base.split("-", 1)
+            if quote_asset not in {"USD", "USDT"}:
+                candidates.append(f"{base_asset}-USD")
+            candidates.append(f"{base_asset}-USDT")
+        return [c for i, c in enumerate(candidates) if c and c not in candidates[:i]]
 
     interval_map = {
         "1m": "1m",
@@ -364,20 +372,78 @@ def _fetch_crypto_via_yfinance(symbol: str, timeframe: str, limit: int):
         "1w": "1wk",
     }
     interval = interval_map.get(timeframe, "60m")
-    period = "60d" if interval.endswith("m") else "2y"
 
-    df = yf.download(s, period=period, interval=interval, progress=False, auto_adjust=False, threads=False)
+    def _period_for_interval(interval_key: str, max_rows: int) -> str:
+        if interval_key in {"1m", "2m"}:
+            return "7d"
+        if interval_key.endswith("m"):
+            return "60d" if max_rows <= 500 else "730d"
+        if interval_key.endswith("d") or interval_key.endswith("wk"):
+            return "10y"
+        return "2y"
+
+    intervals = [interval]
+    if interval != "60m":
+        intervals.append("60m")
+    if "1d" not in intervals:
+        intervals.append("1d")
+    if "1wk" not in intervals:
+        intervals.append("1wk")
+
+    df = None
+    for candidate in _symbol_candidates(symbol):
+        for interval_key in intervals:
+            period = _period_for_interval(interval_key, limit)
+            try:
+                df = yf.download(
+                    tickers=candidate,
+                    period=period,
+                    interval=interval_key,
+                    progress=False,
+                    auto_adjust=False,
+                    threads=False,
+                )
+            except Exception:
+                df = None
+            if df is not None and not getattr(df, "empty", True):
+                break
+        if df is not None and not getattr(df, "empty", True):
+            break
+
     if df is None or getattr(df, "empty", True):
         raise RuntimeError(f"No crypto candles from fallback provider for {symbol}")
+
+    if hasattr(df, "columns") and isinstance(df.columns, pd.MultiIndex):
+        flat_cols = []
+        for col in df.columns:
+            if isinstance(col, tuple):
+                flat_cols.append("_".join([str(x) for x in col if x not in (None, "")]))
+            else:
+                flat_cols.append(str(col))
+        df.columns = flat_cols
+
+    def _pick_col(target: str) -> str | None:
+        target_l = target.lower()
+        exact = [c for c in df.columns if str(c).lower() == target_l]
+        if exact:
+            return exact[0]
+        starts = [c for c in df.columns if str(c).lower().startswith(target_l)]
+        return starts[0] if starts else None
+
+    col_open = _pick_col("open")
+    col_high = _pick_col("high")
+    col_low = _pick_col("low")
+    col_close = _pick_col("close")
+    col_volume = _pick_col("volume")
 
     bars = []
     frame = pd.DataFrame(df).tail(int(limit))
     for ts, row in frame.iterrows():
-        o = row.get("Open")
-        h = row.get("High")
-        l = row.get("Low")
-        c = row.get("Close")
-        v = row.get("Volume", 0.0)
+        o = row.get(col_open or "Open")
+        h = row.get(col_high or "High")
+        l = row.get(col_low or "Low")
+        c = row.get(col_close or "Close")
+        v = row.get(col_volume or "Volume", 0.0)
         if any(pd.isna(x) for x in [o, h, l, c]):
             continue
         ts_dt = ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts
@@ -388,7 +454,6 @@ def _fetch_crypto_via_yfinance(symbol: str, timeframe: str, limit: int):
     if not bars:
         raise RuntimeError(f"Fallback provider returned unusable candle rows for {symbol}")
     return bars
-
 
 def _fetch_crypto(settings: BotSettings, request: LivePredictionRequest, symbol: str, timeframe: str):
     def _fetch_bars_task():
@@ -785,6 +850,8 @@ def run_ad_hoc_backtest(settings: BotSettings, request: AdhocBacktestRequest) ->
             for x in (res.equity_curve[-300:] if len(res.equity_curve) > 300 else res.equity_curve)
         ],
     }
+
+
 
 
 
